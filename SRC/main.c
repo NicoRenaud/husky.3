@@ -8,7 +8,9 @@
 //#include "./manipMol/rotate_molecule.h"
 
 #include "./defMacro.h"
+
 //#include "./manag_output/print_file.h"
+
 #include "./manag_output/print_screen.h"
 #include "./manag_output/export_file.h"
 #include "./manag_output/export_gnuplot.h"
@@ -131,7 +133,7 @@ int main(int argc, char *argv[])
   strcat(sname,"smol.dat");
 
   // local density of states of the electrodes
-  double LDOS; // = 0.18;
+  double LDOS ; //= 0.18;
 
   ////////////////////////////////////////////////////////
   //  read main input
@@ -213,9 +215,11 @@ int main(int argc, char *argv[])
 	// extract the Hamiltonian/Overlap of the molecule
 	Vl = calloc(nb_orb_mol*nb_orb_elec_1,sizeof(double));
 	Sl = calloc(nb_orb_mol*nb_orb_elec_1,sizeof(double));
-	extract(Vl, H, index_orb_mol,nb_orb_mol, index_orb_elec_1,nb_orb_elec_1, nb_orb_tot);
-	extract(Sl, S, index_orb_mol,nb_orb_mol, index_orb_elec_1,nb_orb_elec_1, nb_orb_tot);
-	
+	//extract(Vl, H, index_orb_mol,nb_orb_mol, index_orb_elec_1,nb_orb_elec_1, nb_orb_tot);
+	//extract(Sl, S, index_orb_mol,nb_orb_mol, index_orb_elec_1,nb_orb_elec_1, nb_orb_tot);
+	extract(Vl, H, index_orb_elec_1,nb_orb_elec_1, index_orb_mol,nb_orb_mol, nb_orb_tot);
+	extract(Sl, S, index_orb_elec_1,nb_orb_elec_1, index_orb_mol,nb_orb_mol, nb_orb_tot);
+
 	// extract the Hamiltonian/Overlap of the molecule
 	Vr = calloc(nb_orb_mol*nb_orb_elec_2,sizeof(double));
 	Sr = calloc(nb_orb_mol*nb_orb_elec_2,sizeof(double));
@@ -240,7 +244,7 @@ int main(int argc, char *argv[])
 	linspace(ENERGY, emin,  emax, nb_energy);
 	
 	// compute TE
-	printf(" == Compute the electronic transmission\n");
+	printf(" == Compute the electronic transmission : LDOS = %1.3f\n",LDOS);
 	NEGF_TE(TE, DOS,  ENERGY, LDOS, Hmol, Smol, Vl, Sl, Vr, Sr, nb_orb_mol, nb_orb_elec_1, nb_orb_elec_2, nb_energy);
 	
 
