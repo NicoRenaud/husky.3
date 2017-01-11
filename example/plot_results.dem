@@ -1,0 +1,42 @@
+set term pngcairo enhanced font "Times,20" size 700,400
+
+set style fill solid 1.0 noborder
+set clip two
+
+set xrange [-19:-2]
+set yrange [-8:1]
+
+set grid
+
+set tics out
+set xtics nomirror
+set ytics nomirror
+set key notitle 
+set key spacing 1.2 horizontal out 
+set key width 1.5
+ 
+set palette defined ( 0 '#000090',\
+                      1 '#000fff',\
+                      2 '#0090ff',\
+                      3 '#0fffee',\
+                      4 '#90ff70',\
+                      5 '#ffee00',\
+                      6 '#ff7000',\
+                      7 '#ee0000',\
+                      8 '#7f0000')
+
+set samples 101, 101
+set isosamples 100, 100
+
+set output 'TE.png'
+set style fill transparent solid  0.5 noborder
+set xlabel "E (eV)" font "Times,25"
+set ylabel "log_{10}T(E)" font "Times,25"
+plot 	'./TE.dat' using 1:2 with lines lw 3 lc rgb "#0F00FF" noti "PP"
+
+
+
+
+
+
+
