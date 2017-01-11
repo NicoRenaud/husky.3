@@ -1,0 +1,121 @@
+#include "../defMacro.h"
+#include "../huckel/header.h"
+
+void move_tip_XY( atom* SYSTEM, int *index_tip, int nb_atom_tip, int index_terminal_atom, double x, double y)
+{
+  int i;
+  double xT, yT;
+  double dX,dY;
+  
+  // find the coordinate of the terminal atom;
+  xT = SYSTEM[index_terminal_atom].x;	
+  yT = SYSTEM[index_terminal_atom].y;		
+  
+  // displacement 
+  dX = x-xT; dY = y-yT;
+  
+  // move the tip
+  for(i=0;i<nb_atom_tip;i++)
+  {
+    SYSTEM[index_tip[i]].x += dX;
+    SYSTEM[index_tip[i]].y += dY;
+  }
+
+}
+
+void move_tip_Z( atom* SYSTEM, int *index_tip, int nb_atom_tip, int index_terminal_atom, double z)
+{
+  int i;
+  double zT;
+  double dZ;
+  
+  // find the coordinate of the terminal atom;
+  zT = SYSTEM[index_terminal_atom].z;	
+
+  // displacement 
+  dZ = z-zT; 
+  
+  // move the tip
+  for(i=0;i<nb_atom_tip;i++)
+    SYSTEM[index_tip[i]].z += dZ;
+
+}
+
+
+void update_interaction_matrices(double *Vtip, double *Stip, 
+			       atom *SYSTEM, 
+			       int nb_atom_tot, int  nb_atom_mol,int  nb_atom_surf,int  nb_atom_tip, 
+			       int nb_orb, int  nb_orb_mol, int  nb_orb_surface, int  nb_orb_tip, 
+			       char *orb_elec, char *elec_struct,  char *use_overlap) 
+{
+ 
+  int i;
+  int nb_orb_temp = nb_orb_mol+nb_orb_tip;
+  int nb_atom_temp = nb_atom_mol+nb_atom_tip;
+  atom *sys_temp;
+  double *Htemp, *Stemp;
+  int *index_orb_mol_temp;
+  int *index_orb_tip_temp;
+  
+  // memory allocation
+  Htemp = calloc(nb_orb_temp*nb_orb_temp,sizeof(double));
+  Stemp = calloc(nb_orb_temp*nb_orb_temp,sizeof(double));
+  sys_temp = calloc(nb_atom_temp,sizeof(atom));
+  index_orb_mol_temp = calloc(nb_orb_mol,sizeof(int));
+  index_orb_tip_temp = calloc(nb_orb_tip,sizeof(int));
+  
+  ////////////////////////////////////////
+  // generate the temp system
+  ////////////////////////////////////////
+  
+  // copy the molecule
+  for(i=0;i<nb_atom_mol;i++)
+  {
+    
+    // copy the info in sys_temp
+    strcpy(sys_temp[i].atomTypeChar,SYSTEM[i].atomTypeChar);
+    sys_temp[i].atomtype = SYSTEM[i].atomtype;
+    sys_temp[i].x = SYSTEM[i].x;
+    sys_temp[i].y = SYSTEM[i].y;
+    sys_temp[i].z = SYSTEM[i].z;
+   
+  }
+  
+  // copy the tip
+  for(i=0;i<nb_atom_tip;i++)
+  {
+    strcpy(sys_temp[nb_atom_mol+i].atomTypeChar,SYSTEM[i+nb_atom_mol+nb_atom_surf].atomTypeChar);
+    sys_temp[i+nb_atom_mol].atomtype = SYSTEM[nb_atom_mol+i].atomtype;
+    sys_temp[i+nb_atom_mol].x = SYSTEM[nb_atom_mol+nb_atom_surf+i].x;
+    sys_temp[i+nb_atom_mol].y = SYSTEM[nb_atom_mol+nb_atom_surf+i].y;
+    sys_temp[i+nb_atom_mol].z = SYSTEM[nb_atom_mol+nb_atom_surf+i].z;
+    
+  }
+  
+  //determine the indexes
+  for(i=0;i<nb_orb_mol;i++)
+    index_orb_mol_temp[i] = i;
+   
+  printf("\n");
+  for(i=0;i<nb_orb_tip;i++)
+    index_orb_tip_temp[i] = nb_orb_mol + i;
+  
+  printf("\n");
+  
+  // compute the Hamiltonian
+  compute_huckel_hamiltonian(Htemp, Stemp ,nb_orb_temp, nb_atom_temp, sys_temp, orb_elec, elec_struct, use_overlap);
+  
+
+  // extract the matrices
+  extract(Vtip, Htemp,  index_orb_tip_temp ,nb_orb_tip, index_orb_mol_temp, nb_orb_mol, nb_orb_temp);  
+  extract(Stip, Stemp,  index_orb_tip_temp ,nb_orb_tip, index_orb_mol_temp, nb_orb_mol, nb_orb_temp);
+  
+  
+  // free the memory
+  free(sys_temp);
+  free(Htemp);
+  free(Stemp);
+  free(index_orb_mol_temp);
+  free(index_orb_tip_temp);
+  
+}

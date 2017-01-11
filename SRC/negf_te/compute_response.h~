@@ -1,0 +1,19 @@
+/////////////////////////////////
+// header for the response
+/////////////////////////////////
+
+#include "../huckel/header.h"
+
+#ifndef _compute_respone_h
+#define _compute_respone_h
+
+void map(SYS_XYZ sys, double *H, double *S, double *Hmol, double *Smol, 
+	 atom *SYSTEM, int nb_atom_tot, int nb_atom_mol, int  nb_atom_surf, int nb_atom_tip,
+	 int nb_orb, int *index_orb_mol,  int nb_orb_mol, int *index_orb_elec_1, int nb_orb_elec_1, int *index_orb_elec_2, int nb_orb_elec_2, 
+	 int *index_tip, double LDOS, char *file_map );
+
+void one_point(SYS_XYZ sys, double *H, double *S, double *Hmol, double *Smol, atom *SYSTEM,  int nb_atom_tot, int nb_orb, int *index_orb_mol, int nb_orb_mol, 
+	       int *index_orb_elec_1, int nb_orb_elec_1, int *index_orb_elec_2, int nb_orb_elec_2, double LOS,
+	      char *file_te, char *file_IV, char *file_dIdV, char *file_dos);
+
+#endif

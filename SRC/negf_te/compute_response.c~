@@ -1,0 +1,395 @@
+#include "../defMacro.h"
+#include "../huckel/header.h"
+
+void one_point(SYS_XYZ sys, double *H, double *S, double *Hmol, double *Smol, atom *SYSTEM, int nb_atom_tot,  int nb_orb, int *index_orb_mol,  int nb_orb_mol, 
+	       int *index_orb_elec_1, int nb_orb_elec_1, int *index_orb_elec_2, int nb_orb_elec_2, double LDOS,
+	      char *file_te, char *file_IV, char *file_dIdV, char *file_dos, char *jobtype)
+
+{
+
+  
+  double *energy, *Vbias, *TE, *IV, *dIdV, *DOS, *Vl,*Vr,*Sl,*Sr;
+  int verbose_te = 1;
+  
+
+  energy = calloc(sys.nb_nrj,sizeof(double));
+  Vbias = calloc(sys.nb_nrj,sizeof(double));
+  TE = calloc(sys.nb_nrj,sizeof(double));
+  IV = calloc(sys.nb_nrj,sizeof(double));
+  dIdV = calloc(sys.nb_nrj,sizeof(double));
+  DOS = calloc(sys.nb_nrj,sizeof(double));
+  
+  
+  ////////////////////////////////
+  // 	mem alloc 4 interaction	//
+  ////////////////////////////////
+  Vl = calloc(nb_orb_elec_1*nb_orb_mol,sizeof(double)); 
+  Vr = calloc(nb_orb_elec_2*nb_orb_mol,sizeof(double));  
+  Sl = calloc(nb_orb_elec_1*nb_orb_mol,sizeof(double)); 
+  Sr = calloc(nb_orb_elec_2*nb_orb_mol,sizeof(double));  
+  
+  
+  
+  ////////////////////////////////////////////////
+  // 	   		create Hs		//
+  ////////////////////////////////////////////////
+  if(!strcmp(jobtype,"junction"))
+  {
+    printf(" == Computing the electronic structure \n");
+    compute_huckel_hamiltonian(H, S ,nb_orb, nb_atom_tot, SYSTEM, sys.orb_elec, sys.elec_struct,sys.use_overlap);
+    
+     // index of the 3 different parts
+     compute_orb_index(index_orb_mol, index_orb_elec_1, index_orb_elec_2, nb_orb_mol, nb_orb_elec_1,nb_orb_elec_2);
+  }
+
+  ////////////////////////////////
+  // 	create interaction	//
+  ////////////////////////////////
+  // compute the interaction matrices
+  defInteraction(Vl, Sl,Vr, Sr, index_orb_mol, index_orb_elec_1, index_orb_elec_2, nb_orb_elec_1, nb_orb_elec_2, nb_orb_mol, H , S, nb_orb );
+  
+  ////////////////////////
+  //	Energy range	//
+  ////////////////////////
+  linspace(energy, sys.min_nrj,  sys.max_nrj, sys.nb_nrj);
+  
+  
+  ///////////////////////////////////////////
+  //	print specification of the system
+  ///////////////////////////////////////////
+   printf(" == The system contains  %d atoms for %d orbitals\n\n",nb_atom_tot,nb_orb); 
+  
+  /////////////////////////////////////////////
+  //	Compute the one point transmission
+  /////////////////////////////////////////////
+  if(!strcmp(sys.export_TE,"yes") || !strcmp(sys.export_TE,"YES") )
+      {
+
+	if(!strcmp(sys.jobtype,"stm_map"))
+	  verbose_te = 0;
+	
+	/////////////////////////////
+	//compute T(E) using NEGF
+	////////////////////////////
+	printf(" == Computation of transmission for %d energies\n",sys.nb_nrj);
+	NEGF_TE(TE, DOS,  energy, LDOS, Hmol, Smol, Vl, Sl, Vr, Sr, nb_orb_mol, nb_orb_elec_1, nb_orb_elec_2, sys.nb_nrj,verbose_te);
+	
+	///////////////////////////////////
+	//	export the resutls
+	///////////////////////////////////
+	export_gnulot_semilog(file_te, TE, energy, sys.nb_nrj);
+	export_gnulot(file_dos, DOS, energy, sys.nb_nrj);
+	
+	printf(" == Transmission spectrum written in      : %s\n",file_te);
+	printf(" == Molecule density of state written in  : %s\n",file_dos); 
+	
+	
+	if(!strcmp(sys.export_current,"yes") || !strcmp(sys.export_current,"YES") )
+	{
+	  
+	  computeCurrent(IV, Vbias, TE, energy, sys.nb_nrj, sys.temp, sys.Ef);
+	  export_gnulot(file_IV, IV, Vbias, sys.nb_nrj);
+	  printf(" == Tunnelling Current written in         : %s\n",file_IV);
+	  
+	  computedIdV(dIdV, IV, Vbias, sys.nb_nrj);
+	  export_gnulot(file_dIdV, dIdV, Vbias, sys.nb_nrj);
+	  printf(" == dI/dV written in                      : %s\n",file_dIdV);     
+	}
+      }
+      
+      
+      // free memory
+      free(energy);
+      free(TE);
+      free(IV);
+      free(dIdV);
+      free(DOS);
+      free(Vbias);
+      free(Vr);
+      free(Vl);
+      free(Sl);
+      free(Sr);
+  
+}
+
+
+
+
+void map(SYS_XYZ sys, double *H, double *S, double *Hmol, double *Smol, 
+	 atom *SYSTEM, int nb_atom_tot, int nb_atom_mol, int  nb_atom_surf, int nb_atom_tip,
+	 int nb_orb, int *index_orb_mol,  int nb_orb_mol, int *index_orb_elec_1, int nb_orb_elec_1, int *index_orb_elec_2, int nb_orb_elec_2, 
+	 int *index_tip, double LDOS, char *file_map )
+{
+  
+  
+  int i,j,k=0,l,iP;
+  double xM = 0, yM = 0, zM = 0;
+  double xS = 0, yS = 0, zS = 0;
+  double zT, zSurf;
+  int index_terminal_atom_tip;
+  double *XTIP,*YTIP;
+  double tip_dX, tip_dY;
+  double x_current,y_current,z_current = sys.dist_mol_tip;
+  double E1,E2;
+  
+  int COMPUTE_ALL_ELEC_STRUCT = 1;
+  
+  double *TE,*DOS,*energy;
+  double *Vl,*Vr,*Sl,*Sr;
+  
+  double K;
+  double e_h = 0.486 * 0.001;
+  double current = 0;
+  double *OUT_MAP;
+  double percent, thr = 0., cur_per=0.;
+  double  k_double = 0, nb_pts = sys.stm_resol_map[0]*sys.stm_resol_map[1];
+  char out_file[100];
+  strcpy(out_file,"./OUT/sys_map.xyz");
+  
+  // memory allocation
+  energy = calloc(sys.nb_nrj,sizeof(double));
+  TE = calloc(sys.nb_nrj,sizeof(double));
+  DOS = calloc(sys.nb_nrj,sizeof(double));
+  OUT_MAP = calloc(sys.stm_resol_map[0]*sys.stm_resol_map[1],sizeof(double));
+  
+  XTIP = calloc(sys.stm_resol_map[0],sizeof(double));
+  YTIP = calloc(sys.stm_resol_map[1],sizeof(double));
+  
+  Vl = calloc(nb_orb_elec_1*nb_orb_mol,sizeof(double)); 
+  Vr = calloc(nb_orb_elec_2*nb_orb_mol,sizeof(double));  
+  Sl = calloc(nb_orb_elec_1*nb_orb_mol,sizeof(double)); 
+  Sr = calloc(nb_orb_elec_2*nb_orb_mol,sizeof(double));
+  
+  
+  ////////////////////////////////////////////////
+  // 		energy range			//
+  ////////////////////////////////////////////////
+  if(sys.stm_bias>0)
+  {
+    E1 = sys.Ef;
+    E2 = sys.Ef+sys.stm_bias;
+    K = 1;
+  }
+  else
+  {
+    E1 = sys.Ef-sys.stm_bias;
+    E2 = sys.Ef;
+    K = -1;
+  }
+  linspace(energy, E1,  E2, sys.nb_nrj);
+  
+  //////////////////////////////////////////////////
+  //	Determine the position of the tip	  //
+  //////////////////////////////////////////////////
+  
+  // center of the molecule
+  if(sys.tip_pos[0] == -1)
+  {
+    for(i=0;i<nb_atom_mol;i++)
+    {
+      xM += SYSTEM[i].x;
+      yM += SYSTEM[i].y;
+      zM += SYSTEM[i].z;
+    }  
+    xM/=nb_atom_mol;	yM/=nb_atom_mol;	zM/=nb_atom_mol;
+  }
+  else
+  {
+    for(i=0;i<sys.nb_tip_pos;i++)
+    {
+      xM += SYSTEM[sys.tip_pos[i]].x;
+      yM += SYSTEM[sys.tip_pos[i]].y;
+      zM += SYSTEM[sys.tip_pos[i]].z;
+    }  
+    xM/=sys.nb_tip_pos;	yM/=sys.nb_tip_pos;	zM/=sys.nb_tip_pos;
+    
+    
+  }
+  
+  // starting point of the tip
+  xS = xM - sys.stm_size_map[0]/2.;
+  yS = yM - sys.stm_size_map[1]/2.;
+  
+  // tip position on each direction
+  tip_dX = sys.stm_size_map[0]/(sys.stm_resol_map[0]-1);
+  tip_dY = sys.stm_size_map[1]/(sys.stm_resol_map[1]-1);
+  
+  //////////////////////////////////////////////////
+  //	Determine the temrminal atom of the tip	  //
+  //////////////////////////////////////////////////
+  for(i=nb_atom_mol+nb_atom_surf;i<nb_atom_tot;i++)
+  {
+    // the first atom is lower of course
+    if(i == nb_atom_mol+nb_atom_surf)
+    {
+      index_terminal_atom_tip = i;
+      zT = SYSTEM[i].z;
+    }
+
+    // for the other atom check if it is lower or not before storage
+    else
+    {
+	  if(SYSTEM[i].z < zT) 
+	  {
+	    index_terminal_atom_tip = i;
+	    zT = SYSTEM[i].z;
+	  }
+    }
+  }
+  
+  ////////////////////////////////////////////////////
+  //	determine the highest atom of the surface
+  ////////////////////////////////////////////////////
+  for(i=nb_atom_mol;i<nb_atom_mol+nb_atom_surf;i++)
+  {
+    
+    // the first atom is lower of course
+    if(i == nb_atom_mol)
+      zSurf = SYSTEM[i].z;
+    
+
+    // for the other atom check if it is lower or not before storage
+    else
+    {
+	  if(SYSTEM[i].z > zT) 
+	    zSurf = SYSTEM[i].z;
+    }
+  }
+  
+  /////////////////////////////////////////////////////
+  //	initial height of the tip 		     //
+  /////////////////////////////////////////////////////
+  if(!strcmp(sys.stm_mode,"constant_height"))
+    z_current = zSurf + sys.stm_const;
+  
+  else if(!strcmp(sys.stm_mode,"constant_current"))
+  {
+    if(sys.dist_mol_tip>0)
+      z_current = zSurf + sys.dist_mol_tip;
+  
+    else
+      z_current = zSurf + 5;
+  }
+
+  /////////////////////////////////////////////////////
+  //	Loop on the tip displacement		     //
+  /////////////////////////////////////////////////////
+  
+  if(VERBOSE)
+    printf(" == Begining %s scan of the system : \n    ",sys.stm_mode);
+  fflush(stdout);
+  
+  // for all the row
+  for(i=0;i<sys.stm_resol_map[0];i++)
+  {
+     // current position of the tip in X
+     x_current = xS+i*tip_dX;
+     XTIP[i] = x_current;
+     
+     // for all the column
+     for(j=0;j<sys.stm_resol_map[1];j++)
+     {
+
+	// current position of the tip in Y
+	y_current = yS+j*tip_dY;
+        YTIP[j] = y_current;
+	
+       ///////////////////////////////////////////
+       //	displace the tip 		//
+       ///////////////////////////////////////////
+       move_tip_XY(SYSTEM, index_tip , nb_atom_tip, index_terminal_atom_tip, x_current, y_current);  
+       move_tip_Z(SYSTEM, index_tip , nb_atom_tip, index_terminal_atom_tip, z_current);
+
+       
+       // export the position of the system currently
+       write_system_continue(SYSTEM,nb_atom_tot,out_file,k);
+       
+       ///////////////////////////////////////////
+       //	compute electronic structure	//
+       //	on the total system for the	//
+       //	first iteration only		//
+       ///////////////////////////////////////////
+       if(COMPUTE_ALL_ELEC_STRUCT)
+       {
+	    // compute the Hamiltonian of the entire system
+	    compute_huckel_hamiltonian(H, S ,nb_orb, nb_atom_tot, SYSTEM, sys.orb_elec, sys.elec_struct,sys.use_overlap);
+	    
+	    // index of the 3 different parts
+	    compute_orb_index(index_orb_mol, index_orb_elec_1, index_orb_elec_2, nb_orb_mol, nb_orb_elec_1,nb_orb_elec_2);
+  
+	    // compute the interaction matrices
+	    defInteraction(Vl, Sl,Vr, Sr, index_orb_mol, index_orb_elec_1, index_orb_elec_2, nb_orb_elec_1, nb_orb_elec_2, nb_orb_mol, H , S, nb_orb );
+	    
+	    COMPUTE_ALL_ELEC_STRUCT = 0;
+       }
+       ///////////////////////////////////////////
+       //	Update the interaction		//
+       //	matrices between molecule	//
+       //	and the tip 			//
+       ///////////////////////////////////////////
+       else
+	 update_interaction_matrices(Vr, Sr, SYSTEM, 
+			       nb_atom_tot, nb_atom_mol, nb_atom_surf, nb_atom_tip, 
+			       nb_orb,  nb_orb_mol, nb_orb_elec_1,nb_orb_elec_2, 
+			       sys.orb_elec, sys.elec_struct,  sys.use_overlap);
+	 
+
+	 
+	 
+	 
+       ///////////////////////////////////////////
+       // Compute the TE in this configuration 	//
+       ///////////////////////////////////////////
+       NEGF_TE(TE, DOS,  energy, LDOS, Hmol, Smol, Vl, Sl, Vr, Sr, nb_orb_mol, nb_orb_elec_1, nb_orb_elec_2, sys.nb_nrj,0);
+       
+	//////////////////////////////////////////////////
+       // Compute the current in this configuration 	//
+       ///////////////////////////////////////////////////
+       current = 0;
+       for(l=1;l<sys.nb_nrj;l++)
+	 current += 0.5*e_h*(energy[l]-energy[l-1])*(TE[l]+TE[l-1])*1E6;
+       OUT_MAP[k] = current;
+       
+       if(VERBOSE)
+       {
+	 percent =  k_double/nb_pts;
+// 	 printf("%3.0lf \n",percent);
+	 if(percent>thr)
+	 {
+	   printf(" %3.0f%%", percent*100);
+	   fflush(stdout);
+	   thr += 0.1;
+	 }
+	   
+	   
+       }
+	    
+       
+       // update k
+       k++;
+       k_double = k;
+       
+    }
+    
+  }
+  printf(" 100%%\n");
+  export_scilab_2D(file_map, OUT_MAP, XTIP, sys.stm_resol_map[0], YTIP, sys.stm_resol_map[1]);
+  printf(" == MAP written in         : %s\n",file_map);
+  
+  
+  // free memory
+  free(energy);
+  free(TE);
+  free(DOS); 
+  free(OUT_MAP);
+  
+  free(XTIP);
+  free(YTIP);
+  
+  free(Vl);
+  free(Vr);
+  free(Sl);
+  free(Sr);
+
+  
+}

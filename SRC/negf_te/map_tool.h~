@@ -1,0 +1,15 @@
+/////////////////////////
+// header for map_tool
+////////////////////////
+
+#ifndef map_tool_h
+#define map_tool_h
+
+  void move_tip_XY( atom* SYSTEM, int *index_tip, int nb_atom_tip, int index_terminal_atom, double x, double y);
+  
+  void update_interaction_matrices(double *Vtip, double *Stip, 
+			       atom *SYSTEM, 
+			       int nb_atom_tot,int  nb_atom_mol,int  nb_atom_surf,int  nb_atom_tip, 
+			       int nb_orb, int  nb_orb_mol, int  nb_orb_surface, int  nb_orb_tip, 
+			       char *orb_elec, char *elec_struct,  char *use_overlap) ;
+#endif
